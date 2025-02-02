@@ -33,25 +33,17 @@ function hidePreviewButton() {
 function previewWebsite() {
     const modal = document.getElementById('preview-modal');
     const iframe = document.getElementById('preview-iframe');
-    
-    // Get all hidden spans and take the last one
-    const allHiddenSpans = document.querySelectorAll('span[style="display: none;"]');
-    const fullTextSpan = allHiddenSpans[allHiddenSpans.length - 1];
-    
-    if (!fullTextSpan) {
-        console.error('No hidden span found');
-        alert('Could not find message content');
-        return;
-    }
+    const fullTextSpan = document.querySelector('span[style="display: none;"]');
     
     // Extract HTML code from the last message
     const messageText = fullTextSpan.textContent;
-    console.log('Full message text:', messageText); // Debug log
     
     // Try different markdown code block patterns
     const patterns = [
-        /```html\n([\s\S]*?)```/i,    // Case insensitive HTML
-        /```(\s*html)?\n([\s\S]*?)```/i,  // Optional html tag
+        /```html\n([\s\S]*?)```/,    // Standard markdown
+        /```html\r\n([\s\S]*?)```/,  // Windows line endings
+        /```HTML\n([\s\S]*?)```/,    // Uppercase HTML
+        /```\n([\s\S]*?)```/,        // No language specified
         /`{3}([\s\S]*?)`{3}/         // Any triple backticks
     ];
 
@@ -59,9 +51,7 @@ function previewWebsite() {
     for (const pattern of patterns) {
         const match = messageText.match(pattern);
         if (match) {
-            // If the pattern includes a capture group for 'html', use the last group
-            htmlCode = match[match.length - 1];
-            console.log('Found HTML with pattern:', pattern);
+            htmlCode = match[1];
             break;
         }
     }
@@ -81,6 +71,20 @@ function closePreview() {
     document.getElementById('preview-modal').style.display = 'none';
 }
 
+// Add this helper function for smooth scrolling
+function smoothScrollToBottom(element) {
+    const scrollHeight = element.scrollHeight;
+    const currentScroll = element.scrollTop + element.clientHeight;
+    
+    // Only scroll if we're close to the bottom
+    if (scrollHeight - currentScroll < 100) {
+        element.scrollTo({
+            top: scrollHeight,
+            behavior: 'smooth'
+        });
+    }
+}
+
 // Send message function
 async function sendMessage() {
     if (!DEEPSEEK_API_KEY) {
@@ -93,32 +97,62 @@ async function sendMessage() {
     let message = inputBox.value.trim();
     if (message === "") return;
     
+    // Disable input and show loading state
+    inputBox.disabled = true;
+    const sendButton = document.querySelector('.send-button');
+    sendButton.disabled = true;
+    
     let chatContainer = document.getElementById("chat-container");
     chatContainer.innerHTML += `<p class="complete-message"><strong>You:</strong> ${message}</p>`;
     inputBox.value = "";
     
-    // Create response element without animation
+    // Create response element with loading spinner
     const responseElement = document.createElement('p');
     responseElement.className = 'streaming-message';
-    responseElement.innerHTML = '<strong>Bot:</strong> ';
-    const textSpan = document.createElement('span');
-    responseElement.appendChild(textSpan);
+    responseElement.innerHTML = '<strong>Bot:</strong> <div class="loading-spinner"></div>';
     chatContainer.appendChild(responseElement);
-    
-    // Create hidden span
-    const fullTextSpan = document.createElement('span');
-    fullTextSpan.style.display = 'none';
-    responseElement.appendChild(fullTextSpan);
-    
     chatContainer.scrollTop = chatContainer.scrollHeight;
 
     try {
-        await streamResponse(message, textSpan, fullTextSpan);
+        // Create text span for the response
+        const textSpan = document.createElement('span');
+        const fullTextSpan = document.createElement('span');
+        fullTextSpan.style.display = 'none';
+        
+        // Start the streaming process
+        const streamPromise = streamResponse(message, textSpan, fullTextSpan);
+        
+        // Create a promise that resolves when we get the first token
+        const firstTokenPromise = new Promise((resolve) => {
+            const observer = new MutationObserver((mutations) => {
+                if (textSpan.textContent.length > 0) {
+                    observer.disconnect();
+                    resolve();
+                }
+            });
+            observer.observe(textSpan, { childList: true, subtree: true, characterData: true });
+        });
+
+        // Wait for the first actual token
+        await firstTokenPromise;
+        
+        // Replace loading spinner with text span
+        responseElement.innerHTML = '<strong>Bot:</strong> ';
+        responseElement.appendChild(textSpan);
+        responseElement.appendChild(fullTextSpan);
+        
+        // Complete the streaming
+        await streamPromise;
         responseElement.className = 'complete-message';
         chatContainer.scrollTop = chatContainer.scrollHeight;
     } catch (error) {
-        textSpan.textContent = 'Sorry, I encountered an error. Please try again.';
+        responseElement.innerHTML = '<strong>Bot:</strong> Sorry, I encountered an error. Please try again.';
         console.error('Error:', error);
+    } finally {
+        // Re-enable input
+        inputBox.disabled = false;
+        sendButton.disabled = false;
+        inputBox.focus();
     }
 }
 
@@ -129,17 +163,18 @@ async function streamResponse(message, textSpan, fullTextSpan) {
     let currentMarkdown = '';
     let codeBlock = false;
     let codeLanguage = '';
+    const chatContainer = document.getElementById('chat-container');
 
     try {
         console.log('Attempting API call with key:', DEEPSEEK_API_KEY.substring(0, 5) + '...');
-        const response = await fetch(config.API_URL, {
+        const response = await fetch('https://wxofjhjv5vx9mj-8000.proxy.runpod.net/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-                'Accept': 'text/event-stream'
+                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
             },
             body: JSON.stringify({
+                model: 'deepseek-ai/DeepSeek-R1',
                 messages: [
                     {
                         role: 'system',
@@ -150,9 +185,8 @@ async function streamResponse(message, textSpan, fullTextSpan) {
                         content: message
                     }
                 ],
-                model: 'deepseek-chat',
-                max_tokens: 2000,
                 temperature: 0.7,
+                top_p: 0.95,
                 stream: true
             })
         });
@@ -206,6 +240,9 @@ async function streamResponse(message, textSpan, fullTextSpan) {
                             // Sanitize and render the content
                             const sanitized = DOMPurify.sanitize(marked.parse(currentMarkdown));
                             textSpan.innerHTML = sanitized;
+                            
+                            // Scroll to bottom smoothly
+                            smoothScrollToBottom(chatContainer);
                         }
                         
                         if (data.choices?.[0]?.finish_reason === 'stop') {
@@ -236,6 +273,16 @@ document.addEventListener('DOMContentLoaded', () => {
             sendMessage();
         }
     });
+    
+    // Remove startup overlay after animation
+    setTimeout(() => {
+        const overlay = document.querySelector('.startup-overlay');
+        overlay.style.transition = 'opacity 0.5s ease-out';
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.remove();
+        }, 500);
+    }, 2300); // Wait for animations to complete
 });
 
 // Export functions that need to be accessed from HTML

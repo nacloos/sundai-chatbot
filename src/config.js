@@ -1,6 +1,7 @@
 // Configuration and environment variables
 const config = {
-    API_URL: 'https://api.deepseek.com/v1/chat/completions',
+    API_URL: 'https://wxofjhjv5vx9mj-8000.proxy.runpod.net/v1/chat/completions',
+    MODEL_NAME: 'deepseek-ai/DeepSeek-R1',
     SYSTEM_PROMPT: `You are a helpful and friendly chatbot with a retro computer personality. Keep responses concise and engaging.
     When creating websites, always include these default styles unless specifically requested otherwise:
     - Font family: 'VT323' (include Google Fonts import)
