@@ -20,7 +20,7 @@ const config = {
 async function loadEnvVariables() {
     try {
         return {
-            DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY
+            DEEPSEEK_API_KEY: 'sk-IrR7Bwxtin0haWagUnPrBgq5PurnUz86'
         }
         // Check for environment variables injected into window object
         // if (window.ENV && window.ENV.DEEPSEEK_API_KEY) {
