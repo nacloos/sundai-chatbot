@@ -201,7 +201,7 @@
         // Load environment variables
         async function loadEnvVariables() {
             try {
-                const response = await fetch('/.env');
+                const response = await fetch('../.env');
                 const text = await response.text();
                 const vars = {};
                 text.split('\n').forEach(line => {
@@ -217,17 +217,28 @@
             }
         }
 
-        // OpenAI API configuration
-        let OPENAI_API_KEY = '';
-        const API_URL = 'https://api.openai.com/v1/chat/completions';
+        // Deepseek API configuration
+        let DEEPSEEK_API_KEY = '';
+        const API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
         // Initialize environment variables
         (async () => {
             const env = await loadEnvVariables();
-            OPENAI_API_KEY = env.OPENAI_API_KEY;
+            DEEPSEEK_API_KEY = env.DEEPSEEK_API_KEY;
+            if (DEEPSEEK_API_KEY) {
+                console.log('API key loaded successfully');
+            } else {
+                console.error('Failed to load API key');
+            }
         })();
 
         async function sendMessage() {
+            if (!DEEPSEEK_API_KEY) {
+                console.error('API key not loaded');
+                let chatContainer = document.getElementById("chat-container");
+                chatContainer.innerHTML += `<p><strong>Bot:</strong> Error: API key not loaded. Please check the console for details.</p>`;
+                return;
+            }
             let inputBox = document.getElementById("user-input");
             let message = inputBox.value.trim();
             if (message === "") return;
@@ -259,35 +270,46 @@
         }
         
         async function callOpenAI(message) {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${OPENAI_API_KEY}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-3.5-turbo',
-                    messages: [
-                        {
-                            role: 'system',
-                            content: 'You are a helpful and friendly chatbot with a retro computer personality. Keep responses concise and engaging.'
-                        },
-                        {
-                            role: 'user',
-                            content: message
-                        }
-                    ],
-                    max_tokens: 150,
-                    temperature: 0.7
-                })
-            });
+            try {
+                console.log('Attempting API call with key:', DEEPSEEK_API_KEY.substring(0, 5) + '...');
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        messages: [
+                            {
+                                role: 'system',
+                                content: 'You are a helpful and friendly chatbot with a retro computer personality. Keep responses concise and engaging.'
+                            },
+                            {
+                                role: 'user',
+                                content: message
+                            }
+                        ],
+                        model: 'deepseek-chat',
+                        max_tokens: 150,
+                        temperature: 0.7,
+                        stream: false
+                    })
+                });
 
-            if (!response.ok) {
-                throw new Error(`API call failed: ${response.status}`);
+                if (!response.ok) {
+                    const errorData = await response.text();
+                    console.error('API Response:', errorData);
+                    throw new Error(`API call failed: ${response.status} - ${errorData}`);
+                }
+
+                const data = await response.json();
+                console.log('API Response:', data);
+                return data.choices[0].message.content;
+            } catch (error) {
+                console.error('Detailed error:', error);
+                throw error;
             }
-
-            const data = await response.json();
-            return data.choices[0].message.content;
         }
 
         // Add keypress event listener for the input box
