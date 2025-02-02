@@ -19,16 +19,31 @@ const config = {
 // Load environment variables
 async function loadEnvVariables() {
     try {
-        const response = await fetch('../.env');
-        const text = await response.text();
-        const vars = {};
-        text.split('\n').forEach(line => {
-            const [key, value] = line.split('=');
-            if (key && value) {
-                vars[key.trim()] = value.trim();
-            }
-        });
-        return vars;
+        return {
+            DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY
+        }
+        // Check for environment variables injected into window object
+        // if (window.ENV && window.ENV.DEEPSEEK_API_KEY) {
+        //     return {
+        //         DEEPSEEK_API_KEY: window.ENV.DEEPSEEK_API_KEY
+        //     };
+        // }
+
+        // // Fallback to local .env file
+        // const response = await fetch('../.env');
+        // if (!response.ok) {
+        //     throw new Error('No .env file found');
+        // }
+        
+        // const text = await response.text();
+        // const vars = {};
+        // text.split('\n').forEach(line => {
+        //     const [key, value] = line.split('=');
+        //     if (key && value) {
+        //         vars[key.trim()] = value.trim();
+        //     }
+        // });
+        // return vars;
     } catch (error) {
         console.error('Error loading environment variables:', error);
         return {};
